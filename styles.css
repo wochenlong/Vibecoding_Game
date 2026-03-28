@@ -55,6 +55,22 @@
   box-sizing: border-box;
 }
 
+/* ── Title Screen overlay ─────────────────────────────── */
+#title-screen {
+  /* Prevent text selection during animation */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#title-screen canvas {
+  display: block;
+}
+
+/* When title screen is active, prevent body scroll */
+body.title-screen-active {
+  overflow: hidden;
+}
+
 html {
   color-scheme: light;
 }

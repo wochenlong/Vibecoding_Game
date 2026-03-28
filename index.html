@@ -8,6 +8,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css?v=20260328l" />
+    <!-- Title screen deps: PixiJS v8 + GSAP -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" as="style" onload="this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"></noscript>
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@8/dist/pixi.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -503,6 +508,7 @@
       </section>
     </div>
 
+<script src="src/game/title-screen.js?v=20260328l"></script>
 <script src="version.js?v=20260328l"></script>
 <script src="assets.generated.js?v=20260328l"></script>
 <script src="assets.js?v=20260328l"></script>
