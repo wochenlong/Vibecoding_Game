@@ -1,6 +1,7 @@
 ﻿function attachEvents() {
   initializeInGameMenu()
   window.addEventListener("keydown", handleKeyDown)
+  window.addEventListener("keyup", handleKeyUp)
 
   ui.actionSkill0.addEventListener("click", () =>
     handleBattleAction({ type: "skill", slot: 0 })
@@ -652,6 +653,14 @@ function handleKeyDown(event) {
     return
   }
 
+  if (state.vnActive) {
+    if (typeof handleVNKeyDown === "function") {
+      handleVNKeyDown(event)
+    }
+    event.preventDefault()
+    return
+  }
+
   if (state.scene === "battle") {
     if (String(event.key || "").toLowerCase() === "i") {
       event.preventDefault()
@@ -685,25 +694,29 @@ function handleKeyDown(event) {
 
   if (key === "w" || event.key === "ArrowUp") {
     event.preventDefault()
-    attemptMove(0, -1, "up")
+    state.player.inputDirection = "up"
+    state.player._dirHeld = true
     return
   }
 
   if (key === "s" || event.key === "ArrowDown") {
     event.preventDefault()
-    attemptMove(0, 1, "down")
+    state.player.inputDirection = "down"
+    state.player._dirHeld = true
     return
   }
 
   if (key === "a" || event.key === "ArrowLeft") {
     event.preventDefault()
-    attemptMove(-1, 0, "left")
+    state.player.inputDirection = "left"
+    state.player._dirHeld = true
     return
   }
 
   if (key === "d" || event.key === "ArrowRight") {
     event.preventDefault()
-    attemptMove(1, 0, "right")
+    state.player.inputDirection = "right"
+    state.player._dirHeld = true
     return
   }
 
@@ -731,6 +744,86 @@ function handleKeyDown(event) {
   }
 }
 
+// 方向键到 dx/dy/dir 的映射表
+const DIRECTION_MAP = {
+  up:    { dx: 0,  dy: -1, dir: "up" },
+  down:  { dx: 0,  dy: 1,  dir: "down" },
+  left:  { dx: -1, dy: 0,  dir: "left" },
+  right: { dx: 1,  dy: 0,  dir: "right" },
+}
+
+// 松键清除输入方向
+function handleKeyUp(event) {
+  const key = event.key.toLowerCase()
+  const released = {
+    up:    key === "w" || event.key === "ArrowUp",
+    down:  key === "s" || event.key === "ArrowDown",
+    left:  key === "a" || event.key === "ArrowLeft",
+    right: key === "d" || event.key === "ArrowRight",
+  }
+  const cur = state.player.inputDirection
+  if (cur && released[cur]) {
+    state.player.inputDirection = null
+    state.player._dirHeld = false
+  }
+}
+
+// 平滑移动速度：TILE_SIZE 像素 / 移动时间帧数
+// TILE_SIZE=56，目标 150ms/格，60fps → 约 9 帧 → 每帧 ~6.2px
+// 用固定像素速度而非时间插值，简单稳定
+const MOVE_SPEED_PX = 4  // 56/14 ≈ 每帧 4px，约 233ms/格，接近宝可梦手感
+
+// 每帧由 renderWorld 调用，驱动玩家平滑移动
+function updatePlayerMovement() {
+  const p = state.player
+
+  // 确保渲染坐标已初始化（兼容存档加载）
+  if (!Number.isFinite(p.renderX)) p.renderX = p.x * TILE_SIZE
+  if (!Number.isFinite(p.renderY)) p.renderY = p.y * TILE_SIZE
+
+  const targetX = p.x * TILE_SIZE
+  const targetY = p.y * TILE_SIZE
+
+  if (p.moving) {
+    // 补间趋近目标
+    const dx = targetX - p.renderX
+    const dy = targetY - p.renderY
+    const dist = Math.sqrt(dx * dx + dy * dy)
+
+    if (dist <= MOVE_SPEED_PX) {
+      // 到位，吸附
+      p.renderX = targetX
+      p.renderY = targetY
+      p.moving = false
+
+      // 补间完成后只有键仍按住才继续走（单次点按只走一格）
+      if (p._dirHeld && p.inputDirection && !state.vnActive && !state.choice && state.scene !== "battle") {
+        const move = DIRECTION_MAP[p.inputDirection]
+        if (move) {
+          attemptMove(move.dx, move.dy, move.dir)
+        }
+      }
+    } else {
+      // 按方向线性推进
+      const ratio = MOVE_SPEED_PX / dist
+      p.renderX += dx * ratio
+      p.renderY += dy * ratio
+    }
+  } else {
+    // 静止状态：同步渲染坐标（防止 changeMap/传送后残影）
+    p.renderX = targetX
+    p.renderY = targetY
+
+    // 有输入方向则开始新的移动
+    if (p.inputDirection && !state.vnActive && !state.choice && state.scene !== "battle") {
+      const move = DIRECTION_MAP[p.inputDirection]
+      if (move) {
+        attemptMove(move.dx, move.dy, move.dir)
+      }
+    }
+  }
+}
+
 function attemptMove(dx, dy, direction) {
   state.player.direction = direction
 
@@ -752,6 +845,7 @@ function attemptMove(dx, dy, direction) {
 
   state.player.x = nextX
   state.player.y = nextY
+  state.player.moving = true  // 触发渲染层补间
   state.player.steps += 1
   recoverStoredMonstersOnStep()
   consumeRepelStep()
@@ -1509,6 +1603,11 @@ function changeMap(mapId, x, y, message) {
   state.currentMap = mapId
   state.player.x = x
   state.player.y = y
+  // 地图切换时立即同步渲染坐标，避免补间从旧地图位置滑行
+  state.player.renderX = x * TILE_SIZE
+  state.player.renderY = y * TILE_SIZE
+  state.player.moving = false
+  state.player.inputDirection = null
 
   if (message) {
     addDialogue(message)
@@ -1824,25 +1923,67 @@ function interactProfessor() {
     if (!ensureProfessorIdentityProfile()) {
       return
     }
-    addDialogue("教授雪松: 每位训练家都需要一位可靠的起点伙伴。")
-    addDialogue("教授雪松: 选一只与你一起记录这片区域的图鉴吧。")
-    openChoice("选择你的初始伙伴", [
-      {
-        label: "芽团兽",
-        description: "草系，耐久稳定，适合慢慢推进。",
-        onSelect: () => recruitStarter("sprigoon"),
-      },
-      {
-        label: "炽团犬",
-        description: "火系，输出直接，前期打起来很爽快。",
-        onSelect: () => recruitStarter("embercub"),
-      },
-      {
-        label: "泡鳍兽",
-        description: "水系，攻守平衡，容错比较高。",
-        onSelect: () => recruitStarter("aquaffin"),
-      },
-    ])
+    if (typeof showVNDialogue === "function") {
+      showVNDialogue(
+        [
+          {
+            position: "left",
+            name: "教授 雪松",
+            portrait: "professor",
+            text: "每位训练家都需要一位可靠的起点伙伴。",
+          },
+          {
+            position: "left",
+            name: "教授 雪松",
+            portrait: "professor",
+            text: "选一只与你一起记录这片区域的图鉴吧。",
+          },
+        ],
+        {
+          onComplete: () => {
+            addDialogue("教授雪松: 每位训练家都需要一位可靠的起点伙伴。")
+            addDialogue("教授雪松: 选一只与你一起记录这片区域的图鉴吧。")
+            openChoice("选择你的初始伙伴", [
+              {
+                label: "芽团兽",
+                description: "草系，耐久稳定，适合慢慢推进。",
+                onSelect: () => recruitStarter("sprigoon"),
+              },
+              {
+                label: "炽团犬",
+                description: "火系，输出直接，前期打起来很爽快。",
+                onSelect: () => recruitStarter("embercub"),
+              },
+              {
+                label: "泡鳍兽",
+                description: "水系，攻守平衡，容错比较高。",
+                onSelect: () => recruitStarter("aquaffin"),
+              },
+            ])
+          },
+        }
+      )
+    } else {
+      addDialogue("教授雪松: 每位训练家都需要一位可靠的起点伙伴。")
+      addDialogue("教授雪松: 选一只与你一起记录这片区域的图鉴吧。")
+      openChoice("选择你的初始伙伴", [
+        {
+          label: "芽团兽",
+          description: "草系，耐久稳定，适合慢慢推进。",
+          onSelect: () => recruitStarter("sprigoon"),
+        },
+        {
+          label: "炽团犬",
+          description: "火系，输出直接，前期打起来很爽快。",
+          onSelect: () => recruitStarter("embercub"),
+        },
+        {
+          label: "泡鳍兽",
+          description: "水系，攻守平衡，容错比较高。",
+          onSelect: () => recruitStarter("aquaffin"),
+        },
+      ])
+    }
     return
   }
 
@@ -2040,37 +2181,102 @@ function interactGymAide() {
 
 function interactLeader() {
   if (!state.flags.gymPass) {
-    addDialogue("馆主阿斯特拉: 没有教授的通行证，你还不能接受星辉道馆的试炼。")
+    if (typeof showVNDialogue === "function") {
+      showVNDialogue([
+        {
+          position: "right",
+          name: "馆主 阿斯特拉",
+          portrait: "leader",
+          text: "没有教授的通行证，你还不能接受星辉道馆的试炼。",
+        },
+        {
+          position: "right",
+          name: "馆主 阿斯特拉",
+          portrait: "leader",
+          text: "先去完成教授交代的考验，再来接受我的挑战。",
+        },
+      ])
+    } else {
+      addDialogue("馆主阿斯特拉: 没有教授的通行证，你还不能接受星辉道馆的试炼。")
+    }
     return
   }
 
   if (!state.flags.gymWon) {
     if (!state.flags.gymCounterAidClaimed) {
-      openChoice("馆主阿斯特拉 · 道馆试炼前整备", [
-        {
-          label: "领取对策补给后挑战",
-          description: "获得超级药 x1、战斗活力剂 x1、守护强化剂 x1，再开始馆主战。",
-          onSelect: () => {
-            closeChoice()
-            state.flags.gymCounterAidClaimed = true
-            addInventoryItem("super_potion", 1)
-            addInventoryItem("battle_tonic", 1)
-            addInventoryItem("guard_tonic", 1)
-            addDialogue("馆主阿斯特拉: 我希望你败在策略，而不是败在准备不足。")
-            addDialogue("你获得了道馆对策补给。")
-            queueSave()
-            startTrainerBattle("leader")
+      if (typeof showVNDialogue === "function") {
+        showVNDialogue(
+          [
+            {
+              position: "right",
+              name: "馆主 阿斯特拉",
+              portrait: "leader",
+              text: "你终于来了。星辉道馆的试炼，是真正的意志检验。",
+            },
+            {
+              position: "right",
+              name: "馆主 阿斯特拉",
+              portrait: "leader",
+              text: "挑战之前，我可以给你一份对策补给。准备好了，再来见我。",
+            },
+          ],
+          {
+            onComplete: () => {
+              openChoice("馆主阿斯特拉 · 道馆试炼前整备", [
+                {
+                  label: "领取对策补给后挑战",
+                  description: "获得超级药 x1、战斗活力剂 x1、守护强化剂 x1，再开始馆主战。",
+                  onSelect: () => {
+                    closeChoice()
+                    state.flags.gymCounterAidClaimed = true
+                    addInventoryItem("super_potion", 1)
+                    addInventoryItem("battle_tonic", 1)
+                    addInventoryItem("guard_tonic", 1)
+                    addDialogue("馆主阿斯特拉: 我希望你败在策略，而不是败在准备不足。")
+                    addDialogue("你获得了道馆对策补给。")
+                    queueSave()
+                    startTrainerBattle("leader")
+                  },
+                },
+                {
+                  label: "直接挑战",
+                  description: "不领取补给，立即开始馆主战。",
+                  onSelect: () => {
+                    closeChoice()
+                    startTrainerBattle("leader")
+                  },
+                },
+              ])
+            },
+          }
+        )
+      } else {
+        openChoice("馆主阿斯特拉 · 道馆试炼前整备", [
+          {
+            label: "领取对策补给后挑战",
+            description: "获得超级药 x1、战斗活力剂 x1、守护强化剂 x1，再开始馆主战。",
+            onSelect: () => {
+              closeChoice()
+              state.flags.gymCounterAidClaimed = true
+              addInventoryItem("super_potion", 1)
+              addInventoryItem("battle_tonic", 1)
+              addInventoryItem("guard_tonic", 1)
+              addDialogue("馆主阿斯特拉: 我希望你败在策略，而不是败在准备不足。")
+              addDialogue("你获得了道馆对策补给。")
+              queueSave()
+              startTrainerBattle("leader")
+            },
           },
-        },
-        {
-          label: "直接挑战",
-          description: "不领取补给，立即开始馆主战。",
-          onSelect: () => {
-            closeChoice()
-            startTrainerBattle("leader")
+          {
+            label: "直接挑战",
+            description: "不领取补给，立即开始馆主战。",
+            onSelect: () => {
+              closeChoice()
+              startTrainerBattle("leader")
+            },
           },
-        },
-      ])
+        ])
+      }
       return
     }
     startTrainerBattle("leader")
@@ -3519,16 +3725,47 @@ function setGoldenCinematicOverlayVisible(visible, frame = {}, mode = "fusion") 
   setGoldenCinematicPortrait(ui.prologueCinematicRight, "")
 }
 
+let _cinematicSkipRequested = false
+
 async function playGoldenCinematicFrames(frames, mode = "fusion") {
   const normalizedFrames = Array.isArray(frames) ? frames : []
   if (normalizedFrames.length === 0) {
     return
   }
+  _cinematicSkipRequested = false
+
+  // 创建跳过按钮
+  let skipBtn = document.getElementById("cinematic-skip-btn")
+  if (!skipBtn) {
+    skipBtn = document.createElement("button")
+    skipBtn.id = "cinematic-skip-btn"
+    skipBtn.textContent = "跳过 ▶▶"
+    skipBtn.style.cssText = "position:fixed;top:20px;right:20px;z-index:99999;padding:8px 20px;background:rgba(0,0,0,0.7);color:#ffcc00;border:1px solid rgba(255,204,0,0.4);font-size:14px;cursor:pointer;border-radius:4px;font-family:inherit;transition:background 0.2s;"
+    skipBtn.onmouseenter = () => { skipBtn.style.background = "rgba(255,204,0,0.2)" }
+    skipBtn.onmouseleave = () => { skipBtn.style.background = "rgba(0,0,0,0.7)" }
+    document.body.appendChild(skipBtn)
+  }
+  skipBtn.style.display = "block"
+  skipBtn.onclick = () => { _cinematicSkipRequested = true }
+
+  // ESC 也可跳过
+  const skipOnEsc = (e) => { if (e.key === "Escape") _cinematicSkipRequested = true }
+  window.addEventListener("keydown", skipOnEsc)
+
   setGoldenCinematicOverlayVisible(true, normalizedFrames[0], mode)
   for (const frame of normalizedFrames) {
+    if (_cinematicSkipRequested) break
     setGoldenCinematicOverlayVisible(true, frame, mode)
-    await sleep(Math.max(280, Number(frame?.durationMs) || 1000))
+    // 被跳过时不等待
+    const dur = Math.max(280, Number(frame?.durationMs) || 1000)
+    const step = 50
+    for (let waited = 0; waited < dur && !_cinematicSkipRequested; waited += step) {
+      await sleep(step)
+    }
   }
+
+  skipBtn.style.display = "none"
+  window.removeEventListener("keydown", skipOnEsc)
   setGoldenCinematicOverlayVisible(false)
 }
 

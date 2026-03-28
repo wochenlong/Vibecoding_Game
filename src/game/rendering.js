@@ -1,4 +1,8 @@
 ﻿function renderWorld(time) {
+  // 每帧推进玩家平滑移动（补间层）
+  if (typeof updatePlayerMovement === "function") {
+    updatePlayerMovement()
+  }
   drawMap(time)
   drawAmbientEffects(time)
   drawNpcSprites(time)
@@ -528,7 +532,7 @@ function drawGuideTile(tile, x, y, time) {
   ctx.stroke()
 
   ctx.fillStyle = style.color
-  ctx.font = "700 20px 'Trebuchet MS', 'Segoe UI', sans-serif"
+  ctx.font = "700 20px 'Inter', 'Microsoft YaHei', sans-serif"
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
   ctx.fillText(style.label, x + TILE_SIZE / 2, y + TILE_SIZE / 2 + 1)
@@ -766,7 +770,7 @@ function drawHomeFacilityLabel(label, color, x, y) {
   ctx.roundRect(x + 16, y + 3, TILE_SIZE - 32, 12, 6)
   ctx.fill()
   ctx.fillStyle = color
-  ctx.font = "700 14px 'Trebuchet MS', 'Segoe UI', sans-serif"
+  ctx.font = "700 14px 'Inter', 'Microsoft YaHei', sans-serif"
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
   ctx.fillText(label, x + TILE_SIZE / 2, y + 9)
@@ -883,8 +887,11 @@ function drawNpcSprites(time) {
 }
 
 function drawPlayerSprite(time) {
-  const x = state.player.x * TILE_SIZE + TILE_SIZE / 2
-  const y = state.player.y * TILE_SIZE + TILE_SIZE / 2 + Math.sin(time / 160) * 1.5
+  // 用渲染坐标（浮点像素）而非逻辑网格坐标，实现平滑补间
+  const baseX = Number.isFinite(state.player.renderX) ? state.player.renderX : state.player.x * TILE_SIZE
+  const baseY = Number.isFinite(state.player.renderY) ? state.player.renderY : state.player.y * TILE_SIZE
+  const x = baseX + TILE_SIZE / 2
+  const y = baseY + TILE_SIZE / 2 + Math.sin(time / 160) * 1.5
   drawPixelCharacterSprite(x, y, getOverworldSpritePalette("player"))
   if (shouldRenderPlayerNameTag()) {
     drawCharacterNameTag(x, y + 22, state.playerName || "旅行者", {
@@ -908,7 +915,7 @@ function drawCharacterNameTag(x, y, name, options = {}) {
   const color = options.color || "#f6f4ea"
 
   ctx.save()
-  ctx.font = "700 12px 'Trebuchet MS', 'Segoe UI', sans-serif"
+  ctx.font = "700 12px 'Inter', 'Microsoft YaHei', sans-serif"
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
 
@@ -1064,7 +1071,7 @@ function drawNpcSpeechBubble(time) {
   const bubbleHeight = 34
 
   ctx.save()
-  ctx.font = "700 16px 'Trebuchet MS', 'Segoe UI', sans-serif"
+  ctx.font = "700 16px 'Inter', 'Microsoft YaHei', sans-serif"
   const text = fitSingleLineText(rawText, maxBubbleWidth - 24) || "..."
   const measured = ctx.measureText(text).width
   const bubbleWidth = Math.min(maxBubbleWidth, Math.max(minBubbleWidth, measured + 26))
@@ -2676,6 +2683,7 @@ function hydrateStateFromSnapshot(parsed) {
     scene: "overworld",
     battle: null,
     choice: null,
+    vnActive: false,
     player: {
       ...fresh.player,
       ...(parsed.player || {}),
@@ -2769,6 +2777,12 @@ function hydrateStateFromSnapshot(parsed) {
     state.player.x = 3
     state.player.y = 9
   }
+
+  // 存档加载后立即同步渲染坐标，防止玩家从 (0,0) 滑行到正确位置
+  state.player.renderX = state.player.x * TILE_SIZE
+  state.player.renderY = state.player.y * TILE_SIZE
+  state.player.moving = false
+  state.player.inputDirection = null
 
   if (state.player.reserve.length > MAX_RESERVE_SIZE) {
     const overflow = state.player.reserve.splice(MAX_RESERVE_SIZE)

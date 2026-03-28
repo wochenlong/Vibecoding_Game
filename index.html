@@ -4,7 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GBIT Monster Quest</title>
-  <link rel="stylesheet" href="styles.css?v=20260328l" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css?v=20260328l" />
+    <!-- Title screen deps: PixiJS v8 + GSAP -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" as="style" onload="this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"></noscript>
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@8/dist/pixi.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pixi-filters@6/dist/browser/pixi-filters.min.js"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -500,6 +509,7 @@
       </section>
     </div>
 
+<script src="src/game/title-screen.js?v=20260328l"></script>
 <script src="version.js?v=20260328l"></script>
 <script src="assets.generated.js?v=20260328l"></script>
 <script src="assets.js?v=20260328l"></script>
@@ -507,6 +517,7 @@
 <script src="src/game/balance-config.js?v=20260328l"></script>
 <script src="src/game/bootstrap-ai.js?v=20260328l"></script>
 <script src="src/game/world-events.js?v=20260328l"></script>
+<script src="src/game/vn-dialogue.js?v=20260328l"></script>
 <script src="src/game/battle-system.js?v=20260328l"></script>
 <script src="src/game/evolution-pipeline.js?v=20260328l"></script>
 <script src="src/game/ui-panels.js?v=20260328l"></script>
