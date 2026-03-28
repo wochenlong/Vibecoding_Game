@@ -3720,16 +3720,47 @@ function setGoldenCinematicOverlayVisible(visible, frame = {}, mode = "fusion") 
   setGoldenCinematicPortrait(ui.prologueCinematicRight, "")
 }
 
+let _cinematicSkipRequested = false
+
 async function playGoldenCinematicFrames(frames, mode = "fusion") {
   const normalizedFrames = Array.isArray(frames) ? frames : []
   if (normalizedFrames.length === 0) {
     return
   }
+  _cinematicSkipRequested = false
+
+  // 创建跳过按钮
+  let skipBtn = document.getElementById("cinematic-skip-btn")
+  if (!skipBtn) {
+    skipBtn = document.createElement("button")
+    skipBtn.id = "cinematic-skip-btn"
+    skipBtn.textContent = "跳过 ▶▶"
+    skipBtn.style.cssText = "position:fixed;top:20px;right:20px;z-index:99999;padding:8px 20px;background:rgba(0,0,0,0.7);color:#ffcc00;border:1px solid rgba(255,204,0,0.4);font-size:14px;cursor:pointer;border-radius:4px;font-family:inherit;transition:background 0.2s;"
+    skipBtn.onmouseenter = () => { skipBtn.style.background = "rgba(255,204,0,0.2)" }
+    skipBtn.onmouseleave = () => { skipBtn.style.background = "rgba(0,0,0,0.7)" }
+    document.body.appendChild(skipBtn)
+  }
+  skipBtn.style.display = "block"
+  skipBtn.onclick = () => { _cinematicSkipRequested = true }
+
+  // ESC 也可跳过
+  const skipOnEsc = (e) => { if (e.key === "Escape") _cinematicSkipRequested = true }
+  window.addEventListener("keydown", skipOnEsc)
+
   setGoldenCinematicOverlayVisible(true, normalizedFrames[0], mode)
   for (const frame of normalizedFrames) {
+    if (_cinematicSkipRequested) break
     setGoldenCinematicOverlayVisible(true, frame, mode)
-    await sleep(Math.max(280, Number(frame?.durationMs) || 1000))
+    // 被跳过时不等待
+    const dur = Math.max(280, Number(frame?.durationMs) || 1000)
+    const step = 50
+    for (let waited = 0; waited < dur && !_cinematicSkipRequested; waited += step) {
+      await sleep(step)
+    }
   }
+
+  skipBtn.style.display = "none"
+  window.removeEventListener("keydown", skipOnEsc)
   setGoldenCinematicOverlayVisible(false)
 }
 
