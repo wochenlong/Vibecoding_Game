@@ -41,8 +41,24 @@ const pushResult = (name, pass, detail) => {
 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function dismissTitleScreenIfNeeded() {
+  const titleExists = await page.evaluate(() => Boolean(document.getElementById("title-screen")));
+  if (!titleExists) {
+    return;
+  }
+
+  await page.keyboard.press("Enter");
+  await page
+    .waitForFunction(
+      () => !document.getElementById("title-screen") || Boolean(window.titleScreenState?.dismissed),
+      { timeout: 8000 }
+    )
+    .catch(() => null);
+  await sleep(800);
+}
+
 try {
-  await page.goto(`${baseUrl}/`, { waitUntil: "networkidle2" });
+  await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
   await page.evaluate(() => {
     localStorage.removeItem("gbit_monster_quest_save_v1");
     localStorage.removeItem("gbit_monster_quest_save_profile_v2");
@@ -52,7 +68,8 @@ try {
       }
     }
   });
-  await page.reload({ waitUntil: "networkidle2" });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await dismissTitleScreenIfNeeded();
   await page.waitForSelector("#gameCanvas");
   await page.waitForSelector("#saveMenuNewButton");
   await page.click("#saveMenuNewButton");
@@ -66,6 +83,9 @@ try {
   // Test 1: NPC auto portrait trigger on Enter interaction.
   await page.evaluate(() => {
     state.storyStage = 1;
+    state.scene = "overworld";
+    state.choice = null;
+    state.vnActive = false;
     if (!Array.isArray(state.player.party) || state.player.party.length === 0) {
       state.player.party = [createMonster("sprigoon", 5)];
       state.player.activeIndex = 0;

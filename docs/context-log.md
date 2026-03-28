@@ -1,5 +1,25 @@
 ﻿# Context Log
 
+## 2026-03-28 Iteration BG（合并后稳定性收口：验收脚本适配标题页）
+
+### 任务目标
+- 完成 `github/main` 合并后，恢复验收脚本稳定性，确保自动回归可持续使用。
+
+### 本轮完成
+1. 根因定位：
+   - 验收脚本首步失败并非玩法损坏，而是新增标题页覆盖层导致“未先关标题页就点新游戏”。
+   - 另一个失败点来自开局剧情 `state.choice` 残留拦截按键交互。
+2. 脚本修复：
+   - `scripts/acceptance-interaction.mjs` 新增 `dismissTitleScreenIfNeeded()`，在开测前自动关闭标题页。
+   - 页面加载等待从 `networkidle2` 调整为 `domcontentloaded`，避免资源请求导致的首步超时。
+   - NPC 自动立绘用例增加前置清场（`state.scene/state.choice/state.vnActive`），恢复可交互状态。
+3. 结果验证：
+   - `node scripts/acceptance-interaction.mjs`：`passed=6 failed=0`。
+
+### 关键文件
+- `E:/Ai/Vibecoding_Game/scripts/acceptance-interaction.mjs`
+- `E:/Ai/Vibecoding_Game/docs/context-log.md`
+
 ## 2026-03-28 Iteration BE（外部工具包使用规则同步）
 
 ### 任务目标
