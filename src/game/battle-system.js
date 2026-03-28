@@ -943,6 +943,11 @@ function finishBattle(result) {
     state.currentMap = revivePoint.mapId
     state.player.x = revivePoint.x
     state.player.y = revivePoint.y
+    // 传送到复活点后同步渲染坐标
+    state.player.renderX = revivePoint.x * TILE_SIZE
+    state.player.renderY = revivePoint.y * TILE_SIZE
+    state.player.moving = false
+    state.player.inputDirection = null
     if (revivePoint.fromStatue) {
       addDialogue(`你在失利后被石像网络送回了 ${maps[revivePoint.mapId].name}，队伍已经恢复。`)
     } else {
