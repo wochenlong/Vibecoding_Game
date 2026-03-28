@@ -2676,6 +2676,7 @@ function hydrateStateFromSnapshot(parsed) {
     scene: "overworld",
     battle: null,
     choice: null,
+    vnActive: false,
     player: {
       ...fresh.player,
       ...(parsed.player || {}),

@@ -203,6 +203,7 @@ function createInitialState() {
     alchemyLog: ["Arcane workshop initialized."],
     battle: null,
     choice: null,
+    vnActive: false,
   }
 }
 

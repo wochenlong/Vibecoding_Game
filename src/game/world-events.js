@@ -652,6 +652,14 @@ function handleKeyDown(event) {
     return
   }
 
+  if (state.vnActive) {
+    if (typeof handleVNKeyDown === "function") {
+      handleVNKeyDown(event)
+    }
+    event.preventDefault()
+    return
+  }
+
   if (state.scene === "battle") {
     if (String(event.key || "").toLowerCase() === "i") {
       event.preventDefault()
@@ -1824,25 +1832,67 @@ function interactProfessor() {
     if (!ensureProfessorIdentityProfile()) {
       return
     }
-    addDialogue("教授雪松: 每位训练家都需要一位可靠的起点伙伴。")
-    addDialogue("教授雪松: 选一只与你一起记录这片区域的图鉴吧。")
-    openChoice("选择你的初始伙伴", [
-      {
-        label: "芽团兽",
-        description: "草系，耐久稳定，适合慢慢推进。",
-        onSelect: () => recruitStarter("sprigoon"),
-      },
-      {
-        label: "炽团犬",
-        description: "火系，输出直接，前期打起来很爽快。",
-        onSelect: () => recruitStarter("embercub"),
-      },
-      {
-        label: "泡鳍兽",
-        description: "水系，攻守平衡，容错比较高。",
-        onSelect: () => recruitStarter("aquaffin"),
-      },
-    ])
+    if (typeof showVNDialogue === "function") {
+      showVNDialogue(
+        [
+          {
+            position: "left",
+            name: "教授 雪松",
+            portrait: "professor",
+            text: "每位训练家都需要一位可靠的起点伙伴。",
+          },
+          {
+            position: "left",
+            name: "教授 雪松",
+            portrait: "professor",
+            text: "选一只与你一起记录这片区域的图鉴吧。",
+          },
+        ],
+        {
+          onComplete: () => {
+            addDialogue("教授雪松: 每位训练家都需要一位可靠的起点伙伴。")
+            addDialogue("教授雪松: 选一只与你一起记录这片区域的图鉴吧。")
+            openChoice("选择你的初始伙伴", [
+              {
+                label: "芽团兽",
+                description: "草系，耐久稳定，适合慢慢推进。",
+                onSelect: () => recruitStarter("sprigoon"),
+              },
+              {
+                label: "炽团犬",
+                description: "火系，输出直接，前期打起来很爽快。",
+                onSelect: () => recruitStarter("embercub"),
+              },
+              {
+                label: "泡鳍兽",
+                description: "水系，攻守平衡，容错比较高。",
+                onSelect: () => recruitStarter("aquaffin"),
+              },
+            ])
+          },
+        }
+      )
+    } else {
+      addDialogue("教授雪松: 每位训练家都需要一位可靠的起点伙伴。")
+      addDialogue("教授雪松: 选一只与你一起记录这片区域的图鉴吧。")
+      openChoice("选择你的初始伙伴", [
+        {
+          label: "芽团兽",
+          description: "草系，耐久稳定，适合慢慢推进。",
+          onSelect: () => recruitStarter("sprigoon"),
+        },
+        {
+          label: "炽团犬",
+          description: "火系，输出直接，前期打起来很爽快。",
+          onSelect: () => recruitStarter("embercub"),
+        },
+        {
+          label: "泡鳍兽",
+          description: "水系，攻守平衡，容错比较高。",
+          onSelect: () => recruitStarter("aquaffin"),
+        },
+      ])
+    }
     return
   }
 
@@ -2040,37 +2090,102 @@ function interactGymAide() {
 
 function interactLeader() {
   if (!state.flags.gymPass) {
-    addDialogue("馆主阿斯特拉: 没有教授的通行证，你还不能接受星辉道馆的试炼。")
+    if (typeof showVNDialogue === "function") {
+      showVNDialogue([
+        {
+          position: "right",
+          name: "馆主 阿斯特拉",
+          portrait: "leader",
+          text: "没有教授的通行证，你还不能接受星辉道馆的试炼。",
+        },
+        {
+          position: "right",
+          name: "馆主 阿斯特拉",
+          portrait: "leader",
+          text: "先去完成教授交代的考验，再来接受我的挑战。",
+        },
+      ])
+    } else {
+      addDialogue("馆主阿斯特拉: 没有教授的通行证，你还不能接受星辉道馆的试炼。")
+    }
     return
   }
 
   if (!state.flags.gymWon) {
     if (!state.flags.gymCounterAidClaimed) {
-      openChoice("馆主阿斯特拉 · 道馆试炼前整备", [
-        {
-          label: "领取对策补给后挑战",
-          description: "获得超级药 x1、战斗活力剂 x1、守护强化剂 x1，再开始馆主战。",
-          onSelect: () => {
-            closeChoice()
-            state.flags.gymCounterAidClaimed = true
-            addInventoryItem("super_potion", 1)
-            addInventoryItem("battle_tonic", 1)
-            addInventoryItem("guard_tonic", 1)
-            addDialogue("馆主阿斯特拉: 我希望你败在策略，而不是败在准备不足。")
-            addDialogue("你获得了道馆对策补给。")
-            queueSave()
-            startTrainerBattle("leader")
+      if (typeof showVNDialogue === "function") {
+        showVNDialogue(
+          [
+            {
+              position: "right",
+              name: "馆主 阿斯特拉",
+              portrait: "leader",
+              text: "你终于来了。星辉道馆的试炼，是真正的意志检验。",
+            },
+            {
+              position: "right",
+              name: "馆主 阿斯特拉",
+              portrait: "leader",
+              text: "挑战之前，我可以给你一份对策补给。准备好了，再来见我。",
+            },
+          ],
+          {
+            onComplete: () => {
+              openChoice("馆主阿斯特拉 · 道馆试炼前整备", [
+                {
+                  label: "领取对策补给后挑战",
+                  description: "获得超级药 x1、战斗活力剂 x1、守护强化剂 x1，再开始馆主战。",
+                  onSelect: () => {
+                    closeChoice()
+                    state.flags.gymCounterAidClaimed = true
+                    addInventoryItem("super_potion", 1)
+                    addInventoryItem("battle_tonic", 1)
+                    addInventoryItem("guard_tonic", 1)
+                    addDialogue("馆主阿斯特拉: 我希望你败在策略，而不是败在准备不足。")
+                    addDialogue("你获得了道馆对策补给。")
+                    queueSave()
+                    startTrainerBattle("leader")
+                  },
+                },
+                {
+                  label: "直接挑战",
+                  description: "不领取补给，立即开始馆主战。",
+                  onSelect: () => {
+                    closeChoice()
+                    startTrainerBattle("leader")
+                  },
+                },
+              ])
+            },
+          }
+        )
+      } else {
+        openChoice("馆主阿斯特拉 · 道馆试炼前整备", [
+          {
+            label: "领取对策补给后挑战",
+            description: "获得超级药 x1、战斗活力剂 x1、守护强化剂 x1，再开始馆主战。",
+            onSelect: () => {
+              closeChoice()
+              state.flags.gymCounterAidClaimed = true
+              addInventoryItem("super_potion", 1)
+              addInventoryItem("battle_tonic", 1)
+              addInventoryItem("guard_tonic", 1)
+              addDialogue("馆主阿斯特拉: 我希望你败在策略，而不是败在准备不足。")
+              addDialogue("你获得了道馆对策补给。")
+              queueSave()
+              startTrainerBattle("leader")
+            },
           },
-        },
-        {
-          label: "直接挑战",
-          description: "不领取补给，立即开始馆主战。",
-          onSelect: () => {
-            closeChoice()
-            startTrainerBattle("leader")
+          {
+            label: "直接挑战",
+            description: "不领取补给，立即开始馆主战。",
+            onSelect: () => {
+              closeChoice()
+              startTrainerBattle("leader")
+            },
           },
-        },
-      ])
+        ])
+      }
       return
     }
     startTrainerBattle("leader")
