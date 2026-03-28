@@ -61,6 +61,11 @@ function createInitialState() {
       x: 3,
       y: 9,
       direction: "up",
+      // 渲染坐标（像素），用于平滑补间；逻辑坐标 x/y 保持网格整数不变
+      renderX: 3 * 56,
+      renderY: 9 * 56,
+      moving: false,
+      inputDirection: null,
       steps: 0,
       balls: 5,
       coins: 400,

@@ -1,4 +1,8 @@
 ﻿function renderWorld(time) {
+  // 每帧推进玩家平滑移动（补间层）
+  if (typeof updatePlayerMovement === "function") {
+    updatePlayerMovement()
+  }
   drawMap(time)
   drawAmbientEffects(time)
   drawNpcSprites(time)
@@ -883,8 +887,11 @@ function drawNpcSprites(time) {
 }
 
 function drawPlayerSprite(time) {
-  const x = state.player.x * TILE_SIZE + TILE_SIZE / 2
-  const y = state.player.y * TILE_SIZE + TILE_SIZE / 2 + Math.sin(time / 160) * 1.5
+  // 用渲染坐标（浮点像素）而非逻辑网格坐标，实现平滑补间
+  const baseX = Number.isFinite(state.player.renderX) ? state.player.renderX : state.player.x * TILE_SIZE
+  const baseY = Number.isFinite(state.player.renderY) ? state.player.renderY : state.player.y * TILE_SIZE
+  const x = baseX + TILE_SIZE / 2
+  const y = baseY + TILE_SIZE / 2 + Math.sin(time / 160) * 1.5
   drawPixelCharacterSprite(x, y, getOverworldSpritePalette("player"))
   if (shouldRenderPlayerNameTag()) {
     drawCharacterNameTag(x, y + 22, state.playerName || "旅行者", {
@@ -2770,6 +2777,12 @@ function hydrateStateFromSnapshot(parsed) {
     state.player.x = 3
     state.player.y = 9
   }
+
+  // 存档加载后立即同步渲染坐标，防止玩家从 (0,0) 滑行到正确位置
+  state.player.renderX = state.player.x * TILE_SIZE
+  state.player.renderY = state.player.y * TILE_SIZE
+  state.player.moving = false
+  state.player.inputDirection = null
 
   if (state.player.reserve.length > MAX_RESERVE_SIZE) {
     const overflow = state.player.reserve.splice(MAX_RESERVE_SIZE)

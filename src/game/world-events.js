@@ -1,6 +1,7 @@
 ﻿function attachEvents() {
   initializeInGameMenu()
   window.addEventListener("keydown", handleKeyDown)
+  window.addEventListener("keyup", handleKeyUp)
 
   ui.actionSkill0.addEventListener("click", () =>
     handleBattleAction({ type: "skill", slot: 0 })
@@ -693,25 +694,25 @@ function handleKeyDown(event) {
 
   if (key === "w" || event.key === "ArrowUp") {
     event.preventDefault()
-    attemptMove(0, -1, "up")
+    state.player.inputDirection = "up"
     return
   }
 
   if (key === "s" || event.key === "ArrowDown") {
     event.preventDefault()
-    attemptMove(0, 1, "down")
+    state.player.inputDirection = "down"
     return
   }
 
   if (key === "a" || event.key === "ArrowLeft") {
     event.preventDefault()
-    attemptMove(-1, 0, "left")
+    state.player.inputDirection = "left"
     return
   }
 
   if (key === "d" || event.key === "ArrowRight") {
     event.preventDefault()
-    attemptMove(1, 0, "right")
+    state.player.inputDirection = "right"
     return
   }
 
@@ -739,6 +740,85 @@ function handleKeyDown(event) {
   }
 }
 
+// 方向键到 dx/dy/dir 的映射表
+const DIRECTION_MAP = {
+  up:    { dx: 0,  dy: -1, dir: "up" },
+  down:  { dx: 0,  dy: 1,  dir: "down" },
+  left:  { dx: -1, dy: 0,  dir: "left" },
+  right: { dx: 1,  dy: 0,  dir: "right" },
+}
+
+// 松键清除输入方向
+function handleKeyUp(event) {
+  const key = event.key.toLowerCase()
+  const released = {
+    up:    key === "w" || event.key === "ArrowUp",
+    down:  key === "s" || event.key === "ArrowDown",
+    left:  key === "a" || event.key === "ArrowLeft",
+    right: key === "d" || event.key === "ArrowRight",
+  }
+  const cur = state.player.inputDirection
+  if (cur && released[cur]) {
+    state.player.inputDirection = null
+  }
+}
+
+// 平滑移动速度：TILE_SIZE 像素 / 移动时间帧数
+// TILE_SIZE=56，目标 150ms/格，60fps → 约 9 帧 → 每帧 ~6.2px
+// 用固定像素速度而非时间插值，简单稳定
+const MOVE_SPEED_PX = 7  // 56/8 ≈ 每帧 7px，约 133ms/格
+
+// 每帧由 renderWorld 调用，驱动玩家平滑移动
+function updatePlayerMovement() {
+  const p = state.player
+
+  // 确保渲染坐标已初始化（兼容存档加载）
+  if (!Number.isFinite(p.renderX)) p.renderX = p.x * TILE_SIZE
+  if (!Number.isFinite(p.renderY)) p.renderY = p.y * TILE_SIZE
+
+  const targetX = p.x * TILE_SIZE
+  const targetY = p.y * TILE_SIZE
+
+  if (p.moving) {
+    // 补间趋近目标
+    const dx = targetX - p.renderX
+    const dy = targetY - p.renderY
+    const dist = Math.sqrt(dx * dx + dy * dy)
+
+    if (dist <= MOVE_SPEED_PX) {
+      // 到位，吸附
+      p.renderX = targetX
+      p.renderY = targetY
+      p.moving = false
+
+      // 补间完成后立即检查是否继续按着方向键
+      if (p.inputDirection && !state.vnActive && !state.choice && state.scene !== "battle") {
+        const move = DIRECTION_MAP[p.inputDirection]
+        if (move) {
+          attemptMove(move.dx, move.dy, move.dir)
+        }
+      }
+    } else {
+      // 按方向线性推进
+      const ratio = MOVE_SPEED_PX / dist
+      p.renderX += dx * ratio
+      p.renderY += dy * ratio
+    }
+  } else {
+    // 静止状态：同步渲染坐标（防止 changeMap/传送后残影）
+    p.renderX = targetX
+    p.renderY = targetY
+
+    // 有输入方向则开始新的移动
+    if (p.inputDirection && !state.vnActive && !state.choice && state.scene !== "battle") {
+      const move = DIRECTION_MAP[p.inputDirection]
+      if (move) {
+        attemptMove(move.dx, move.dy, move.dir)
+      }
+    }
+  }
+}
+
 function attemptMove(dx, dy, direction) {
   state.player.direction = direction
 
@@ -760,6 +840,7 @@ function attemptMove(dx, dy, direction) {
 
   state.player.x = nextX
   state.player.y = nextY
+  state.player.moving = true  // 触发渲染层补间
   state.player.steps += 1
   recoverStoredMonstersOnStep()
   consumeRepelStep()
@@ -1517,6 +1598,11 @@ function changeMap(mapId, x, y, message) {
   state.currentMap = mapId
   state.player.x = x
   state.player.y = y
+  // 地图切换时立即同步渲染坐标，避免补间从旧地图位置滑行
+  state.player.renderX = x * TILE_SIZE
+  state.player.renderY = y * TILE_SIZE
+  state.player.moving = false
+  state.player.inputDirection = null
 
   if (message) {
     addDialogue(message)
