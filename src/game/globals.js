@@ -1,4 +1,4 @@
-﻿const TILE_SIZE = 56
+const TILE_SIZE = 56
 const MAP_WIDTH = 16
 const MAP_HEIGHT = 12
 const MAX_PARTY_SIZE = 6
@@ -41,6 +41,23 @@ function normalizeTransitionDirection(value) {
   const normalized = String(value || "").trim().toLowerCase()
   if (normalized === "up" || normalized === "down" || normalized === "left" || normalized === "right") {
     return normalized
+  }
+  return ""
+}
+
+function normalizeEncounterZoneType(value) {
+  const normalized = String(value || "").trim().toLowerCase()
+  if (normalized === "grass" || normalized === "water" || normalized === "dirt") {
+    return normalized
+  }
+  if (normalized === "shaking") {
+    return "grass"
+  }
+  if (normalized === "ripple") {
+    return "water"
+  }
+  if (normalized === "dust") {
+    return "dirt"
   }
   return ""
 }
@@ -129,6 +146,52 @@ function normalizeSceneTransition(transition, index) {
   }
 }
 
+function collectEncounterZoneRuntime(encounterZones) {
+  const encounterTypeByCell = Object.create(null)
+  const encounterZonesByType = {
+    grass: [],
+    water: [],
+    dirt: [],
+  }
+
+  if (!Array.isArray(encounterZones)) {
+    return {
+      encounterTypeByCell,
+      encounterZonesByType,
+    }
+  }
+
+  for (const zone of encounterZones) {
+    if (!zone || typeof zone !== "object") {
+      continue
+    }
+    const zoneType = normalizeEncounterZoneType(zone.type)
+    if (!zoneType) {
+      continue
+    }
+
+    const cellKeys = collectSceneCells(zone.cells, zone.rects)
+    for (const key of cellKeys) {
+      if (encounterTypeByCell[key]) {
+        continue
+      }
+      encounterTypeByCell[key] = zoneType
+      const [rawX, rawY] = String(key).split(":")
+      const x = normalizeGridInt(rawX, -1)
+      const y = normalizeGridInt(rawY, -1)
+      if (x < 0 || y < 0) {
+        continue
+      }
+      encounterZonesByType[zoneType].push({ x, y })
+    }
+  }
+
+  return {
+    encounterTypeByCell,
+    encounterZonesByType,
+  }
+}
+
 function buildSceneCollisionRuntimeMap(mapId, mapConfig) {
   if (!mapConfig || typeof mapConfig !== "object") {
     return null
@@ -138,6 +201,7 @@ function buildSceneCollisionRuntimeMap(mapId, mapConfig) {
   const blocked = collectSceneCells(mapConfig.blockedCells, mapConfig.blockedRects)
   const transitionByCell = Object.create(null)
   const transitions = []
+  const encounterRuntime = collectEncounterZoneRuntime(mapConfig.encounterZones)
 
   if (Array.isArray(mapConfig.transitions)) {
     for (let i = 0; i < mapConfig.transitions.length; i += 1) {
@@ -157,6 +221,8 @@ function buildSceneCollisionRuntimeMap(mapId, mapConfig) {
     blocked,
     transitions,
     transitionByCell,
+    encounterTypeByCell: encounterRuntime.encounterTypeByCell,
+    encounterZonesByType: encounterRuntime.encounterZonesByType,
   }
 }
 
@@ -236,6 +302,18 @@ function getSceneCollisionTransition(mapId, x, y) {
     return null
   }
   return runtimeMap.transitionByCell[toSceneCellKey(x, y)] || null
+}
+
+function getSceneEncounterZone(mapId, x, y) {
+  const runtimeMap = getSceneCollisionMap(mapId)
+  if (!runtimeMap) {
+    return ""
+  }
+  if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT) {
+    return ""
+  }
+  const zoneType = runtimeMap.encounterTypeByCell?.[toSceneCellKey(x, y)]
+  return typeof zoneType === "string" ? zoneType : ""
 }
 
 const sceneThemes = {
@@ -1148,6 +1226,50 @@ const speciesData = {
     description: "古代祭祀中被奉为林域秩序的管理者，传说中不具性别。",
     isLegendary: true,
   },
+  runebreeze: {
+    name: "符风灵",
+    type: "fairy",
+    baseHp: 52,
+    baseAttack: 17,
+    baseDefense: 16,
+    baseSpeed: 19,
+    baseExp: 232,
+    skills: ["prism_lance", "moon_barrier"],
+    description: "只在天穹遗迹外环现身，羽翼会拖出符文光痕，被视为遗迹守门者。",
+  },
+  aegislith: {
+    name: "穹壁石卫",
+    type: "rock",
+    baseHp: 60,
+    baseAttack: 18,
+    baseDefense: 22,
+    baseSpeed: 11,
+    baseExp: 240,
+    skills: ["relic_roar", "shell_breaker"],
+    description: "遗迹石像长期吸收地脉后诞生的护卫体，装甲厚重，擅长正面压制。",
+  },
+  abyssiris: {
+    name: "渊镜灵鲛",
+    type: "water",
+    baseHp: 56,
+    baseAttack: 18,
+    baseDefense: 17,
+    baseSpeed: 15,
+    baseExp: 236,
+    skills: ["aurora_tide", "tidal_arc"],
+    description: "会在遗迹地面投下镜潮幻影，擅长用连续潮汐拉扯战线。",
+  },
+  thunderion: {
+    name: "霆环兽",
+    type: "electric",
+    baseHp: 54,
+    baseAttack: 20,
+    baseDefense: 15,
+    baseSpeed: 18,
+    baseExp: 238,
+    skills: ["thunder_current", "static_bolt"],
+    description: "徘徊在祭坛上空的电环猎手，出手极快，常以连锁电流先发制人。",
+  },
   stormcrest: {
     name: "霆穹鸟",
     type: "electric",
@@ -1999,7 +2121,7 @@ const maps = {
     tiles: [
       "################",
       "#<..ggssgg.B.>.#",
-      "#..gggggggggg..#",
+      "#..gggggggggO..#",
       "#..g....A.g.g..#",
       "#..g..##..g.g..#",
       "#..s..##..s.g..#",
@@ -2392,14 +2514,19 @@ const maps = {
       "#....#..#..A...#",
       "#....#Z.#......#",
       "#....####......#",
-      "#......S..W....#",
+      "#..B...S..WB...#",
       "#..............#",
-      "#..............#",
+      "#..B.......B...#",
       "#..............#",
       "#..............#",
       "################",
     ],
-    encounters: [],
+    encounters: [
+      { speciesId: "runebreeze", minLevel: 30, maxLevel: 33, weight: 30 },
+      { speciesId: "aegislith", minLevel: 31, maxLevel: 34, weight: 26 },
+      { speciesId: "abyssiris", minLevel: 30, maxLevel: 34, weight: 24 },
+      { speciesId: "thunderion", minLevel: 32, maxLevel: 35, weight: 20 },
+    ],
     legendaryEncounter: {
       speciesId: "solaraith",
       level: 21,
@@ -2429,6 +2556,22 @@ const maps = {
     encounters: [],
   },
 }
+
+const TELEPORT_POINTS = Object.freeze([
+  { id: "town", label: "星辉城", pinX: 320, pinY: 410, spawnX: 8, spawnY: 9 },
+  { id: "route", label: "花冠大道", pinX: 510, pinY: 280, spawnX: 1, spawnY: 9 },
+  { id: "cave", label: "幽气石洞", pinX: 680, pinY: 200, spawnX: 2, spawnY: 1 },
+  { id: "lake", label: "湖区", pinX: 200, pinY: 180, spawnX: 3, spawnY: 8 },
+])
+
+const TELEPORT_POINT_BY_ID = Object.freeze(
+  TELEPORT_POINTS.reduce((acc, point) => {
+    if (point && point.id) {
+      acc[point.id] = point
+    }
+    return acc
+  }, {})
+)
 
 const typeNames = {
   normal: "普通",
@@ -2682,6 +2825,14 @@ const itemCatalog = {
     kind: "key",
     unique: true,
   },
+  sanctum_survey_card: {
+    name: "遗迹调查任务卡",
+    description: "教授雪松发放的中期任务卡，记录卷尘/水纹/摇草三类生态调查进度。",
+    price: 0,
+    category: "key",
+    kind: "key",
+    unique: true,
+  },
 }
 
 const ui = {
@@ -2704,6 +2855,7 @@ const ui = {
   homeCount: document.getElementById("homeCount"),
   homePanel: document.getElementById("homePanel"),
   bagPanel: document.getElementById("bagPanel"),
+  mapPanel: document.getElementById("mapPanel"),
   coinsCount: document.getElementById("coinsCount"),
   pokedexPanel: document.getElementById("pokedexPanel"),
   seenCount: document.getElementById("seenCount"),
@@ -2896,7 +3048,7 @@ const npcDefinitions = [
   {
     id: "scout",
     map: "route",
-    x: 10,
+    x: 7,
     y: 7,
     name: "蚀星先遣 洛克",
     symbol: "蚀",
